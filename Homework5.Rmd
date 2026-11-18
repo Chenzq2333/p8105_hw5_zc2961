@@ -1,0 +1,75 @@
+---
+title: "Homework 5"
+author: "Zhiquan Chen"
+output: github_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 9,
+  fig.height = 6,
+  out.width = "90%"
+)
+
+library(tidyverse)
+
+theme_set(
+  theme_minimal(base_size = 14) +
+    theme(legend.position = "bottom")
+)
+```
+
+## Problem1
+I simulated birthdays as independent draws from 365 equally likely days. The function below returns `TRUE` if at least two people share a birthday and `FALSE` otherwise.
+```{r p1_function}
+simulate_birthday = function(group_size) {
+  birthdays = sample(1:365, size = group_size, replace = TRUE)
+  any(duplicated(birthdays))
+}
+```
+```{r p1_simulation}
+set.seed(1)
+
+birthday_results =
+  tibble(group_size = 2:50) |>
+  mutate(
+    shared_birthday = map(
+      group_size,
+      \(n) map_lgl(
+        seq_len(10000),
+        \(iteration) simulate_birthday(group_size = n)
+      )
+    ),
+    probability = map_dbl(shared_birthday, mean)
+  )
+
+stopifnot(
+  nrow(birthday_results) == 49,
+  all(lengths(birthday_results$shared_birthday) == 10000),
+  all(birthday_results$probability >= 0),
+  all(birthday_results$probability <= 1)
+)
+```
+```{r p1_plot}
+birthday_results |>
+  ggplot(aes(x = group_size, y = probability)) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60") +
+  geom_line(linewidth = 0.8, color = "#0072B2") +
+  geom_point(size = 1.8, color = "#0072B2") +
+  scale_x_continuous(breaks = c(2, 10, 20, 23, 30, 40, 50)) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25),
+    labels = scales::label_percent()
+  ) +
+  labs(
+    title = "Shared birthdays become more likely as the group grows",
+    subtitle = "10,000 simulated groups at each group size",
+    x = "Number of people in the group",
+    y = "Probability of at least one shared birthday"
+  )
+```
+
+For each group size, I averaged the results of 10,000 simulations. The estimated probability of a shared birthday is `r sprintf("%.1f%%", 100 * birthday_results$probability[birthday_results$group_size == 23])` for 23 people and `r sprintf("%.1f%%", 100 * birthday_results$probability[birthday_results$group_size == 50])` for 50 people. The probability rises quickly because the number of pairs of people increases with group size. A group of 23 people already contains 253 possible pairs, so a shared birthday is fairly likely even though there are 365 possible birthdays.
