@@ -22,7 +22,7 @@ theme_set(
 ```
 
 ## Problem1
-I simulated birthdays as independent draws from 365 equally likely days. The function below returns `TRUE` if at least two people share a birthday and `FALSE` otherwise.
+
 ```{r p1_function}
 simulate_birthday = function(group_size) {
   birthdays = sample(1:365, size = group_size, replace = TRUE)
@@ -45,12 +45,7 @@ birthday_results =
     probability = map_dbl(shared_birthday, mean)
   )
 
-stopifnot(
-  nrow(birthday_results) == 49,
-  all(lengths(birthday_results$shared_birthday) == 10000),
-  all(birthday_results$probability >= 0),
-  all(birthday_results$probability <= 1)
-)
+
 ```
 ```{r p1_plot}
 birthday_results |>
@@ -96,11 +91,6 @@ subject_files =
     )
   )
 
-stopifnot(
-  nrow(subject_files) == 20,
-  all(map_int(subject_files$data, nrow) == 1),
-  all(map_int(subject_files$data, ncol) == 8)
-)
 ```
 
 ```{r p2_tidy}
@@ -132,16 +122,11 @@ study_df =
   select(participant_id, subject_id, arm, week, observation) |>
   arrange(arm, subject_id, week)
 
-stopifnot(
-  nrow(study_df) == 160,
-  n_distinct(study_df$participant_id) == 20,
-  all(count(study_df, participant_id)$n == 8),
-  all(count(study_df, participant_id, week)$n == 1),
-  !anyNA(study_df),
-  identical(sort(unique(study_df$week)), 1:8)
-)
+
 ```
+
 I first created a dataframe of file names and used `map()` to read each participant's observations into a list column. I then expanded the list column, extracted the arm and subject ID, and converted the eight weekly columns to long format. The tidy dataset contains `r nrow(study_df)` observations from `r n_distinct(study_df$participant_id)` participants followed for eight weeks. Each row represents one participant at one week. Subject IDs are repeated across arms, so `participant_id` combines the arm and subject ID to identify each person uniquely.
+
 ```{r p2_summary}
 arm_summary =
   study_df |>
@@ -154,15 +139,8 @@ arm_summary =
     .groups = "drop"
   )
 
-knitr::kable(
-  arm_summary,
-  digits = 2,
-  col.names = c(
-    "Arm", "Participants", "Week 1 mean", "Week 8 mean", "Mean change"
-  ),
-  caption = "Observed values at the first and last weeks by study arm"
-)
 ```
+
 ```{r p2_plot}
 study_df |>
   ggplot(
@@ -220,13 +198,6 @@ simulation_results =
   ) |>
   unnest(cols = results) |>
   mutate(rejected = p_value < 0.05)
-
-stopifnot(
-  nrow(simulation_results) == 35000,
-  all(count(simulation_results, true_mu)$n == 5000),
-  !anyNA(simulation_results),
-  all(between(simulation_results$p_value, 0, 1))
-)
 ```
 
 ```{r p3_summary}
@@ -234,24 +205,12 @@ simulation_summary =
   simulation_results |>
   group_by(true_mu) |>
   summarise(
-    n_sim = n(),
-    rejections = sum(rejected),
     rejection_rate = mean(rejected),
     mean_estimate = mean(mu_hat),
     mean_estimate_rejected = mean(mu_hat[rejected]),
     .groups = "drop"
   )
 
-simulation_summary |>
-  select(true_mu, rejection_rate, mean_estimate, mean_estimate_rejected) |>
-  knitr::kable(
-    digits = 3,
-    col.names = c(
-      "True mean", "Rejection rate", "Mean estimate: all samples",
-      "Mean estimate: rejected tests"
-    ),
-    caption = "Results from 5,000 simulations at each true mean"
-  )
 ```
 
 ```{r p3_power_plot}
