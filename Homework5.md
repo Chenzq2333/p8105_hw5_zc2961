@@ -207,3 +207,166 @@ The experimental group mean increases from 1.14 in week 1 to 5.12 in
 week 8. The corresponding control group means are 0.92 and 0.74.
 Individual trajectories vary in both groups, but the separation between
 groups is clearer by the later weeks.
+
+## Problem3
+
+``` r
+simulate_t_test = function(mu, n = 30, sigma = 5) {
+  x = rnorm(n, mean = mu, sd = sigma)
+
+  t.test(x, mu = 0, alternative = "two.sided") |>
+    broom::tidy() |>
+    select(mu_hat = estimate, p_value = p.value)
+}
+```
+
+``` r
+set.seed(3)
+
+simulation_results =
+  tibble(true_mu = 0:6) |>
+  mutate(
+    results = map(
+      true_mu,
+      \(mu_value) tibble(iteration = seq_len(5000)) |>
+        mutate(
+          result = map(
+            iteration,
+            \(i) simulate_t_test(mu = mu_value)
+          )
+        ) |>
+        unnest(cols = result)
+    )
+  ) |>
+  unnest(cols = results) |>
+  mutate(rejected = p_value < 0.05)
+
+stopifnot(
+  nrow(simulation_results) == 35000,
+  all(count(simulation_results, true_mu)$n == 5000),
+  !anyNA(simulation_results),
+  all(between(simulation_results$p_value, 0, 1))
+)
+```
+
+``` r
+simulation_summary =
+  simulation_results |>
+  group_by(true_mu) |>
+  summarise(
+    n_sim = n(),
+    rejections = sum(rejected),
+    rejection_rate = mean(rejected),
+    mean_estimate = mean(mu_hat),
+    mean_estimate_rejected = mean(mu_hat[rejected]),
+    .groups = "drop"
+  )
+
+simulation_summary |>
+  select(true_mu, rejection_rate, mean_estimate, mean_estimate_rejected) |>
+  knitr::kable(
+    digits = 3,
+    col.names = c(
+      "True mean", "Rejection rate", "Mean estimate: all samples",
+      "Mean estimate: rejected tests"
+    ),
+    caption = "Results from 5,000 simulations at each true mean"
+  )
+```
+
+| True mean | Rejection rate | Mean estimate: all samples | Mean estimate: rejected tests |
+|---:|---:|---:|---:|
+| 0 | 0.050 | -0.001 | 0.005 |
+| 1 | 0.182 | 0.997 | 2.233 |
+| 2 | 0.560 | 2.003 | 2.624 |
+| 3 | 0.886 | 2.997 | 3.189 |
+| 4 | 0.987 | 4.017 | 4.048 |
+| 5 | 0.999 | 4.994 | 4.996 |
+| 6 | 1.000 | 6.017 | 6.018 |
+
+Results from 5,000 simulations at each true mean
+
+``` r
+simulation_summary |>
+  ggplot(aes(x = true_mu, y = rejection_rate)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed", color = "grey60") +
+  geom_line(linewidth = 0.8, color = "#0072B2") +
+  geom_point(size = 2.5, color = "#0072B2") +
+  scale_x_continuous(breaks = 0:6) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25),
+    labels = scales::label_percent()
+  ) +
+  labs(
+    title = "Power increases as the true mean moves away from zero",
+    subtitle = "Two-sided one-sample t-tests; n = 30, SD = 5, alpha = 0.05",
+    x = "True mean",
+    y = "Proportion of tests rejecting the null",
+    caption = "At a true mean of zero, the rejection rate estimates the Type I error rate."
+  )
+```
+
+<img src="Homework5_files/figure-gfm/p3_power_plot-1.png" alt="" width="90%" />
+
+With the sample size and standard deviation fixed, power increases as
+the true mean moves farther from zero. The estimated power is 18.2% at a
+true mean of 1, 56.0% at a true mean of 2, and 98.7% at a true mean of
+4. Larger effects are easier to distinguish from sampling variability.
+At a true mean of zero, the null hypothesis is true, so the rejection
+rate of 5.0% estimates the Type I error rate, which is close to the
+chosen 5% significance level.
+
+``` r
+estimate_plot_df =
+  simulation_summary |>
+  select(true_mu, mean_estimate, mean_estimate_rejected) |>
+  pivot_longer(
+    cols = c(mean_estimate, mean_estimate_rejected),
+    names_to = "sample_set",
+    values_to = "average_estimate"
+  ) |>
+  mutate(
+    sample_set = factor(
+      sample_set,
+      levels = c("mean_estimate", "mean_estimate_rejected"),
+      labels = c("All samples", "Rejected tests only")
+    )
+  )
+
+estimate_plot_df |>
+  ggplot(aes(x = true_mu, y = average_estimate, color = sample_set)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey50") +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  scale_color_manual(
+    values = c("All samples" = "#0072B2", "Rejected tests only" = "#D55E00")
+  ) +
+  scale_x_continuous(breaks = 0:6) +
+  labs(
+    title = "Selecting rejected tests changes the average estimate",
+    subtitle = "Dashed line: average estimate equals the true mean",
+    x = "True mean",
+    y = "Average estimated mean",
+    color = NULL
+  )
+```
+
+<img src="Homework5_files/figure-gfm/p3_estimate_plot-1.png" alt="" width="90%" />
+
+Across all samples, the average estimated mean is close to the true
+mean. Among rejected tests, the average estimate is higher than the true
+mean when the true effect is small and positive. For example, at a true
+mean of 1, the average estimate is 1.00 across all samples and 2.23
+among rejected tests. Rejection depends on the sample mean relative to
+its estimated standard error. When the true positive effect is small,
+samples with unusually large positive means are more likely to pass the
+rejection threshold, so retaining only rejected tests inflates the
+average estimate. As power approaches one, almost all samples are
+retained and the two averages converge.
+
+At a true mean of zero, the two-sided test selects extreme means in both
+directions. Symmetry makes the conditional mean zero in expectation,
+even though the selected estimates tend to be farther from zero. In this
+finite simulation, the average estimate among rejected tests is 0.0046;
+its departure from zero reflects Monte Carlo variability.
